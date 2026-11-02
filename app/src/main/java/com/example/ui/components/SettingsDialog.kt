@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.livekit.LiveKitTokenGenerator
 import com.example.model.LiveKitConfig
 import com.example.model.VisualizerType
 import com.example.ui.icons.PhosphorIcons
@@ -67,8 +68,12 @@ fun SettingsDialog(
 ) {
     var serverUrl by remember { mutableStateOf(config.serverUrl) }
     var roomName by remember { mutableStateOf(config.roomName) }
+    var apiKey by remember { mutableStateOf(config.apiKey) }
+    var apiSecret by remember { mutableStateOf(config.apiSecret) }
     var token by remember { mutableStateOf(config.token) }
     var tokenServerUrl by remember { mutableStateOf(config.tokenServerUrl) }
+    var speechmaticsApiKey by remember { mutableStateOf(config.speechmaticsApiKey) }
+    var mem0ApiKey by remember { mutableStateOf(config.mem0ApiKey) }
     var isDemoMode by remember { mutableStateOf(config.isDemoMode) }
     var selectedVisualizer by remember { mutableStateOf(config.visualizerType) }
 
@@ -175,6 +180,17 @@ fun SettingsDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     PresetChip(
+                        title = "Nola Cloud",
+                        selected = serverUrl == "wss://nola-nr9t1jj5.livekit.cloud",
+                        onClick = {
+                            serverUrl = "wss://nola-nr9t1jj5.livekit.cloud"
+                            apiKey = "API6KvEtLuf2muJ"
+                            apiSecret = "7IUG92S4tr4AnjRYp3at3MJztfwtBePam5hm9ZnM9z9"
+                            roomName = "nola-agent-room"
+                            token = LiveKitTokenGenerator.createToken(apiKey, apiSecret, roomName)
+                        }
+                    )
+                    PresetChip(
                         title = "Local PC LAN",
                         selected = serverUrl.contains("192.168") || serverUrl.contains("localhost"),
                         onClick = {
@@ -183,8 +199,8 @@ fun SettingsDialog(
                         }
                     )
                     PresetChip(
-                        title = "LiveKit Cloud",
-                        selected = serverUrl.contains("livekit.cloud"),
+                        title = "Custom Cloud",
+                        selected = serverUrl.contains("livekit.cloud") && serverUrl != "wss://nola-nr9t1jj5.livekit.cloud",
                         onClick = {
                             serverUrl = "wss://my-project.livekit.cloud"
                             tokenServerUrl = "https://my-token-endpoint.vercel.app/api/token"
@@ -323,6 +339,78 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // LiveKit Cloud Credentials (API Key & Secret)
+                Text(
+                    text = "LiveKit API Key",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    placeholder = { Text("API...", color = TextMuted) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LiveKitCyan,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "LiveKit API Secret",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = apiSecret,
+                    onValueChange = { apiSecret = it },
+                    placeholder = { Text("Secret...", color = TextMuted) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LiveKitCyan,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (apiKey.isNotBlank() && apiSecret.isNotBlank()) {
+                            token = LiveKitTokenGenerator.createToken(
+                                apiKey = apiKey.trim(),
+                                apiSecret = apiSecret.trim(),
+                                roomName = roomName.trim()
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LiveKitCyan),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LiveKitCyan.copy(alpha = 0.5f))
+                ) {
+                    Icon(
+                        imageVector = PhosphorIcons.Key,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Generate Token with Credentials", fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 // Direct Room Token (JWT)
                 Text(
                     text = "Room Access Token (JWT)",
@@ -345,6 +433,66 @@ fun SettingsDialog(
                     )
                 )
 
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Speechmatics STT API Key
+                Text(
+                    text = "Speechmatics API Key (Voice STT)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = speechmaticsApiKey,
+                    onValueChange = { speechmaticsApiKey = it },
+                    placeholder = { Text("Speechmatics API Key", color = TextMuted) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LiveKitCyan,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Auto-fallback to on-device speech recognizer if credits deplete",
+                    fontSize = 10.sp,
+                    color = TextMuted
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Mem0 Memory API Key
+                Text(
+                    text = "Mem0 Memory API Key (Persistent Context)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = mem0ApiKey,
+                    onValueChange = { mem0ApiKey = it },
+                    placeholder = { Text("Mem0 API Key (m0-...)", color = TextMuted) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LiveKitCyan,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Maintains persistent cross-session memory for Nola",
+                    fontSize = 10.sp,
+                    color = TextMuted
+                )
+
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // Save Action
@@ -354,8 +502,12 @@ fun SettingsDialog(
                             config.copy(
                                 serverUrl = serverUrl.trim(),
                                 roomName = roomName.trim(),
+                                apiKey = apiKey.trim(),
+                                apiSecret = apiSecret.trim(),
                                 token = token.trim(),
                                 tokenServerUrl = tokenServerUrl.trim(),
+                                speechmaticsApiKey = speechmaticsApiKey.trim(),
+                                mem0ApiKey = mem0ApiKey.trim(),
                                 isDemoMode = isDemoMode,
                                 visualizerType = selectedVisualizer
                             )

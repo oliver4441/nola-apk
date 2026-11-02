@@ -31,11 +31,15 @@ data class TranscriptEntry(
 )
 
 data class LiveKitConfig(
-    val serverUrl: String = "ws://192.168.1.100:7880",
-    val roomName: String = "agent-room",
+    val serverUrl: String = "wss://nola-nr9t1jj5.livekit.cloud",
+    val roomName: String = "nola-agent-room",
+    val apiKey: String = "API6KvEtLuf2muJ",
+    val apiSecret: String = "7IUG92S4tr4AnjRYp3at3MJztfwtBePam5hm9ZnM9z9",
     val token: String = "",
-    val tokenServerUrl: String = "http://192.168.1.100:3000/api/token",
-    val isDemoMode: Boolean = true,
+    val tokenServerUrl: String = "",
+    val speechmaticsApiKey: String = "JveXZCYN749DW2RJMLcyArLS2tsLBbau",
+    val mem0ApiKey: String = "m0-8DbLHr53LfqrdtcIgTFq8VTOSFZh4HIzSMYpLN1y",
+    val isDemoMode: Boolean = false,
     val isSpeakerOn: Boolean = true,
     val visualizerType: VisualizerType = VisualizerType.Aura
 )

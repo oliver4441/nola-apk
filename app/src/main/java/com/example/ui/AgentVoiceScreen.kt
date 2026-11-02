@@ -66,6 +66,7 @@ import com.example.ui.components.AgentAudioVisualizerBar
 import com.example.ui.components.AgentAudioVisualizerRadial
 import com.example.ui.components.AgentAudioVisualizerWave
 import com.example.ui.components.AgentControlBar
+import com.example.ui.components.AgentMemorySheet
 import com.example.ui.components.AgentTranscriptDrawer
 import com.example.ui.components.SettingsDialog
 import com.example.ui.icons.PhosphorIcons
@@ -104,6 +105,10 @@ fun AgentVoiceScreen(
     val statusMessage by viewModel.statusMessage.collectAsState()
     val latencyMs by viewModel.latencyMs.collectAsState()
     val selectedVisualizer by viewModel.selectedVisualizer.collectAsState()
+    val isMemorySheetOpen by viewModel.isMemorySheetOpen.collectAsState()
+    val memories by viewModel.memories.collectAsState()
+    val sttProviderName by viewModel.sttProviderName.collectAsState()
+    val isSpeechmaticsCreditDepleted by viewModel.isSpeechmaticsCreditDepleted.collectAsState()
 
     // Runtime Permission for Microphone Audio Record
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -173,10 +178,14 @@ fun AgentVoiceScreen(
                     .padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top Header: Branding, State Badge & Latency
+                // Top Header: Branding, State Badge, Mem0 & Latency
                 TopHeaderBar(
                     agentState = agentState,
                     latencyMs = latencyMs,
+                    memoriesCount = memories.size,
+                    sttProviderName = sttProviderName,
+                    isSpeechmaticsCreditDepleted = isSpeechmaticsCreditDepleted,
+                    onOpenMemory = { viewModel.openMemorySheet() },
                     onOpenSettings = { viewModel.openSettings() }
                 )
 
@@ -277,6 +286,14 @@ fun AgentVoiceScreen(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
 
+            // Mem0 Memory Sheet Overlay
+            AgentMemorySheet(
+                isVisible = isMemorySheetOpen,
+                memories = memories,
+                onClose = { viewModel.closeMemorySheet() },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
             // Settings & Connection Dialog
             if (isSettingsOpen) {
                 SettingsDialog(
@@ -294,68 +311,121 @@ fun AgentVoiceScreen(
 private fun TopHeaderBar(
     agentState: AgentState,
     latencyMs: Int,
+    memoriesCount: Int,
+    sttProviderName: String,
+    isSpeechmaticsCreditDepleted: Boolean,
+    onOpenMemory: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(top = 10.dp, bottom = 4.dp)
     ) {
-        // App title & Phosphor icon
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable(onClick = onOpenSettings)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .border(1.5.dp, LiveKitCyan.copy(alpha = 0.6f), CircleShape),
-                contentAlignment = Alignment.Center
+            // App title & Avatar
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(onClick = onOpenSettings)
             ) {
-                Image(
-                    painter = painterResource(R.drawable.nola_avatar_logo_1793604638432),
-                    contentDescription = "Nola Avatar Logo",
-                    modifier = Modifier.fillMaxSize()
-                )
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, LiveKitCyan.copy(alpha = 0.6f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.nola_avatar_logo_1793604638432),
+                        contentDescription = "Nola Avatar Logo",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Nola",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Gemini + Mem0 Voice",
+                        fontSize = 11.sp,
+                        color = TextMuted
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = "Nola",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "AI Voice Companion",
-                    fontSize = 11.sp,
-                    color = TextMuted
-                )
+
+            // Mem0 Button & State Pill
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Mem0 Memory Chip
+                Surface(
+                    color = LiveKitIndigo.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LiveKitIndigo.copy(alpha = 0.4f)),
+                    modifier = Modifier.clickable(onClick = onOpenMemory)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = PhosphorIcons.Sparkle,
+                            contentDescription = "Mem0 Memory",
+                            tint = LiveKitIndigo,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Mem0 ($memoriesCount)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextPrimary
+                        )
+                    }
+                }
+
+                StateBadge(agentState = agentState)
             }
         }
 
-        // Live Room Status Pill & Ping
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            StateBadge(agentState = agentState)
+        Spacer(modifier = Modifier.height(6.dp))
 
-            Spacer(modifier = Modifier.width(10.dp))
-
+        // STT Provider Banner / Fallback indicator
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Surface(
-                color = DarkSurfaceVariant,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                color = if (isSpeechmaticsCreditDepleted) StatusWarning.copy(alpha = 0.12f) else LiveKitCyan.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isSpeechmaticsCreditDepleted) StatusWarning.copy(alpha = 0.4f) else LiveKitCyan.copy(alpha = 0.25f)
+                )
             ) {
                 Text(
-                    text = "${latencyMs}ms",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    text = if (isSpeechmaticsCreditDepleted) "STT: Android On-Device (Speechmatics Credit Depleted)" else "STT: Speechmatics AI",
+                    fontSize = 10.sp,
+                    color = if (isSpeechmaticsCreditDepleted) StatusWarning else LiveKitCyan,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
+
+            Text(
+                text = "${latencyMs}ms ping",
+                fontSize = 10.sp,
+                color = TextMuted
+            )
         }
     }
 }

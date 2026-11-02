@@ -14,6 +14,8 @@ import com.example.viewmodel.AgentViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Configure Firebase App Check with launch intent before UI or Firebase operations
+        com.example.firebase.configureAppCheck(this, intent)
         enableEdgeToEdge()
         setContent {
             LiveKitWaveTheme {

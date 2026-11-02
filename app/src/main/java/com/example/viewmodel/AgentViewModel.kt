@@ -3,12 +3,19 @@ package com.example.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ai.GeminiVoiceService
 import com.example.audio.AudioLevelAnalyzer
+import com.example.livekit.LiveKitClientSession
+import com.example.livekit.LiveKitConnectionState
+import com.example.livekit.LiveKitTokenGenerator
+import com.example.memory.Mem0Service
+import com.example.memory.MemoryItem
 import com.example.model.AgentState
 import com.example.model.LiveKitConfig
 import com.example.model.Speaker
 import com.example.model.TranscriptEntry
 import com.example.model.VisualizerType
+import com.example.stt.SpeechRecognizerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -21,15 +28,14 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
 class AgentViewModel(application: Application) : AndroidViewModel(application) {
 
     private val audioAnalyzer = AudioLevelAnalyzer(viewModelScope)
+    private val geminiService = GeminiVoiceService()
+    val mem0Service = Mem0Service()
 
     private val _agentState = MutableStateFlow(AgentState.Listening)
     val agentState: StateFlow<AgentState> = _agentState.asStateFlow()
@@ -49,6 +55,12 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSettingsOpen = MutableStateFlow(false)
     val isSettingsOpen: StateFlow<Boolean> = _isSettingsOpen.asStateFlow()
 
+    private val _isMemorySheetOpen = MutableStateFlow(false)
+    val isMemorySheetOpen: StateFlow<Boolean> = _isMemorySheetOpen.asStateFlow()
+
+    private val _memories = MutableStateFlow<List<MemoryItem>>(emptyList())
+    val memories: StateFlow<List<MemoryItem>> = _memories.asStateFlow()
+
     private val _latencyMs = MutableStateFlow(24)
     val latencyMs: StateFlow<Int> = _latencyMs.asStateFlow()
 
@@ -61,11 +73,57 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     private val _transcripts = MutableStateFlow<List<TranscriptEntry>>(emptyList())
     val transcripts: StateFlow<List<TranscriptEntry>> = _transcripts.asStateFlow()
 
-    private val _statusMessage = MutableStateFlow("Ready to chat")
+    private val _statusMessage = MutableStateFlow("Connected to LiveKit Cloud")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
+    private val speechRecognizer = SpeechRecognizerService(
+        context = application.applicationContext,
+        scope = viewModelScope,
+        speechmaticsApiKey = _config.value.speechmaticsApiKey
+    ) { recognizedText ->
+        processUserVoiceInput(recognizedText)
+    }
+
+    val sttProviderName: StateFlow<String> = speechRecognizer.sttProviderName
+    val isSpeechmaticsCreditDepleted: StateFlow<Boolean> = speechRecognizer.isCreditDepleted
+
+    // Official LiveKit Client Session connected to Cloud WebRTC Signal
+    private val liveKitSession = LiveKitClientSession(
+        scope = viewModelScope,
+        onMessageReceived = { message ->
+            handleLiveKitMessage(message)
+        },
+        onAgentSpeaking = { isSpeaking ->
+            if (isSpeaking) {
+                _agentState.value = AgentState.Speaking
+                _statusMessage.value = "Nola is speaking via LiveKit"
+            } else if (_agentState.value == AgentState.Speaking) {
+                _agentState.value = AgentState.Listening
+                _statusMessage.value = "Listening to you"
+            }
+        },
+        onStateChanged = { connectionState ->
+            when (connectionState) {
+                LiveKitConnectionState.Connected -> {
+                    _statusMessage.value = "Connected to LiveKit Cloud (${_config.value.roomName})"
+                    addTranscript(Speaker.System, "LiveKit Cloud room established: ${_config.value.roomName}")
+                }
+                LiveKitConnectionState.Connecting -> {
+                    _statusMessage.value = "Connecting to LiveKit Cloud..."
+                }
+                LiveKitConnectionState.Reconnecting -> {
+                    _statusMessage.value = "Reconnecting to LiveKit..."
+                }
+                LiveKitConnectionState.Disconnected -> {
+                    _statusMessage.value = "Disconnected from LiveKit"
+                }
+            }
+        }
+    )
+
+    val liveKitConnectionState: StateFlow<LiveKitConnectionState> = liveKitSession.connectionState
+
     private var speakingJob: Job? = null
-    private var webSocket: WebSocket? = null
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -84,21 +142,56 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         // Add initial system greeting transcript
         addTranscript(
             speaker = Speaker.System,
-            text = "Connected to Nola voice agent session. Tap mic or speak naturally."
+            text = "Nola session ready. LiveKit Cloud: ${_config.value.serverUrl} (Room: ${_config.value.roomName})"
         )
+
+        // Load initial memories from Mem0
+        viewModelScope.launch {
+            val initialMemories = mem0Service.getAllMemories()
+            _memories.value = initialMemories
+        }
+
+        // Connect to LiveKit Cloud automatically
+        connectToLiveKitCloud()
 
         // Start listening immediately
         startMicCapture()
     }
 
+    private fun connectToLiveKitCloud() {
+        val cfg = _config.value
+        val tokenToUse = if (cfg.token.isNotBlank()) {
+            cfg.token
+        } else if (cfg.apiKey.isNotBlank() && cfg.apiSecret.isNotBlank()) {
+            LiveKitTokenGenerator.createToken(
+                apiKey = cfg.apiKey,
+                apiSecret = cfg.apiSecret,
+                roomName = cfg.roomName
+            )
+        } else {
+            ""
+        }
+
+        if (tokenToUse.isNotBlank() && !cfg.isDemoMode) {
+            _config.value = cfg.copy(token = tokenToUse)
+            liveKitSession.connect(
+                url = cfg.serverUrl,
+                token = tokenToUse,
+                roomName = cfg.roomName
+            )
+        }
+    }
+
     fun startMicCapture() {
         if (!_isMicMuted.value) {
             audioAnalyzer.startListening()
+            speechRecognizer.startListening()
         }
     }
 
     fun stopMicCapture() {
         audioAnalyzer.stopListening()
+        speechRecognizer.stopListening()
     }
 
     fun toggleMic() {
@@ -106,12 +199,14 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         _isMicMuted.value = newMuted
         if (newMuted) {
             audioAnalyzer.stopListening()
+            speechRecognizer.stopListening()
             _audioAmplitude.value = 0.02f
             if (_agentState.value == AgentState.Listening) {
                 _statusMessage.value = "Microphone muted"
             }
         } else {
             audioAnalyzer.startListening()
+            speechRecognizer.startListening()
             if (_agentState.value == AgentState.Listening) {
                 _statusMessage.value = "Listening to you"
             }
@@ -134,6 +229,17 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
         _isSettingsOpen.value = false
     }
 
+    fun openMemorySheet() {
+        _isMemorySheetOpen.value = true
+        viewModelScope.launch {
+            _memories.value = mem0Service.getAllMemories()
+        }
+    }
+
+    fun closeMemorySheet() {
+        _isMemorySheetOpen.value = false
+    }
+
     fun setVisualizer(type: VisualizerType) {
         _selectedVisualizer.value = type
         _config.value = _config.value.copy(visualizerType = type)
@@ -142,9 +248,11 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     fun updateConfig(newConfig: LiveKitConfig) {
         _config.value = newConfig
         _selectedVisualizer.value = newConfig.visualizerType
-        if (!newConfig.isDemoMode && newConfig.serverUrl.isNotBlank()) {
-            connectLiveKitWebSocket(newConfig.serverUrl, newConfig.token)
-        }
+        speechRecognizer.setApiKey(newConfig.speechmaticsApiKey)
+        mem0Service.setApiKey(newConfig.mem0ApiKey)
+
+        // Reconnect to LiveKit Cloud with updated parameters
+        connectToLiveKitCloud()
     }
 
     fun fetchToken(endpointUrl: String) {
@@ -156,8 +264,10 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
                 val body = response.body?.string() ?: ""
                 if (response.isSuccessful && body.isNotBlank()) {
                     withContext(Dispatchers.Main) {
-                        _config.value = _config.value.copy(token = body.trim().replace("\"", ""))
+                        val fetchedToken = body.trim().replace("\"", "")
+                        _config.value = _config.value.copy(token = fetchedToken)
                         addTranscript(Speaker.System, "Fetched new LiveKit token from server.")
+                        connectToLiveKitCloud()
                     }
                 }
             } catch (e: Exception) {
@@ -169,84 +279,75 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Connects to LiveKit WebSocket signal server when configured.
+     * Processes live user voice input using Mem0 memory search, Gemini 3.8 Flash, and LiveKit data channel.
      */
-    private fun connectLiveKitWebSocket(serverUrl: String, token: String) {
-        webSocket?.close(1000, "Reconnecting")
-        _agentState.value = AgentState.Connecting
-        _statusMessage.value = "Handshaking with LiveKit..."
+    fun processUserVoiceInput(spokenText: String) {
+        if (spokenText.isBlank() || _agentState.value == AgentState.Speaking) return
 
-        val wsUrl = if (token.isNotBlank()) {
-            val separator = if (serverUrl.contains("?")) "&" else "?"
-            "$serverUrl${separator}access_token=$token"
-        } else {
-            serverUrl
+        viewModelScope.launch {
+            // 1. Add user message
+            addTranscript(Speaker.User, spokenText)
+            _statusMessage.value = "Consulting Mem0 memory..."
+
+            // Send to LiveKit session data channel
+            liveKitSession.sendData(spokenText)
+
+            // 2. Transition to Thinking state
+            _agentState.value = AgentState.Thinking
+            _audioAmplitude.value = 0.45f
+
+            // 3. Search relevant memories in Mem0
+            val relevantMemories = try {
+                mem0Service.searchMemories(spokenText)
+            } catch (_: Exception) {
+                emptyList()
+            }
+
+            _statusMessage.value = "Nola thinking with Gemini..."
+
+            // 4. Generate intelligent spoken response using Firebase AI Logic Gemini 3.8 Flash
+            val recentTurns = _transcripts.value.takeLast(6).map {
+                when (it.speaker) {
+                    Speaker.User -> "User" to it.text
+                    Speaker.Agent -> "Nola" to it.text
+                    Speaker.System -> "System" to it.text
+                }
+            }
+
+            val geminiResponse = try {
+                geminiService.generateVoiceResponse(
+                    userPrompt = spokenText,
+                    relevantMemories = relevantMemories,
+                    recentTranscripts = recentTurns
+                )
+            } catch (e: Exception) {
+                "I understand, and I am ready with the next step."
+            }
+
+            // 5. Speak response and animate waveform
+            triggerAgentSpeaking(geminiResponse)
+
+            // 6. Asynchronously save turn into Mem0 memory so Nola remembers next time
+            launch(Dispatchers.IO) {
+                try {
+                    mem0Service.addMemory(spokenText, geminiResponse)
+                    val updated = mem0Service.getAllMemories()
+                    _memories.value = updated
+                } catch (_: Exception) {}
+            }
         }
-
-        try {
-            val request = Request.Builder().url(wsUrl).build()
-            webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
-                override fun onOpen(webSocket: WebSocket, response: Response) {
-                    viewModelScope.launch {
-                        _agentState.value = AgentState.Connected
-                        delay(600)
-                        _agentState.value = AgentState.Listening
-                        _statusMessage.value = "Agent connected and listening"
-                        addTranscript(Speaker.System, "LiveKit room session established.")
-                    }
-                }
-
-                override fun onMessage(webSocket: WebSocket, text: String) {
-                    viewModelScope.launch {
-                        handleAgentMessage(text)
-                    }
-                }
-
-                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    viewModelScope.launch {
-                        _statusMessage.value = "Connection dropped. Falling back to voice loop."
-                        _agentState.value = AgentState.Listening
-                    }
-                }
-            })
-        } catch (e: Exception) {
-            _statusMessage.value = "Connection error: ${e.message}"
-            _agentState.value = AgentState.Listening
-        }
-    }
-
-    private fun handleAgentMessage(message: String) {
-        // Handle incoming data channel transcript or agent state
-        addTranscript(Speaker.Agent, message)
-        triggerAgentSpeaking(message)
     }
 
     /**
      * User voice prompt simulation or trigger.
      */
     fun simulateUserPrompt(promptText: String = "What are the latest updates on the task?") {
-        if (_agentState.value == AgentState.Speaking) return
+        processUserVoiceInput(promptText)
+    }
 
-        viewModelScope.launch {
-            // 1. User speaks
-            addTranscript(Speaker.User, promptText)
-            _statusMessage.value = "Analyzing speech..."
-
-            // 2. Agent enters thinking state
-            _agentState.value = AgentState.Thinking
-            _audioAmplitude.value = 0.45f
-            delay(1200)
-
-            // 3. Agent responds
-            val agentResponses = listOf(
-                "I have completed running the tests and the LiveKit agent pipeline is active on your machine.",
-                "All systems are synced. Audio tracks are transmitting at low latency.",
-                "I am monitoring the server telemetry. Memory and CPU usage on your PC look steady.",
-                "Understood. I will execute the routine and stream the output back to your device."
-            )
-            val selectedResponse = agentResponses[Random.nextInt(agentResponses.size)]
-            triggerAgentSpeaking(selectedResponse)
-        }
+    private fun handleLiveKitMessage(message: String) {
+        addTranscript(Speaker.Agent, message)
+        triggerAgentSpeaking(message)
     }
 
     /**
@@ -263,7 +364,6 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
             val startTime = System.currentTimeMillis()
 
             while (isActive && (System.currentTimeMillis() - startTime) < durationMs) {
-                // Modulate amplitude rhythmically to match voice cadence
                 val elapsed = (System.currentTimeMillis() - startTime).toFloat() / 200f
                 val voiceAmp = (kotlin.math.sin(elapsed.toDouble()).toFloat() * 0.35f + 0.55f).coerceIn(0.2f, 0.95f)
                 _audioAmplitude.value = voiceAmp
@@ -274,13 +374,14 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
             _audioAmplitude.value = 0.05f
             _agentState.value = AgentState.Listening
             _statusMessage.value = "Listening to you"
+            speechRecognizer.startListening()
         }
     }
 
     fun endSession() {
         speakingJob?.cancel()
-        webSocket?.close(1000, "User ended call")
-        webSocket = null
+        speechRecognizer.stopListening()
+        liveKitSession.disconnect()
         _agentState.value = AgentState.Disconnected
         _statusMessage.value = "Session ended. Tap to reconnect."
         _audioAmplitude.value = 0.01f
@@ -289,12 +390,13 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reconnectSession() {
         _agentState.value = AgentState.Connecting
-        _statusMessage.value = "Reconnecting to LiveKit..."
+        _statusMessage.value = "Reconnecting to LiveKit Cloud..."
         viewModelScope.launch {
             delay(900)
+            connectToLiveKitCloud()
             _agentState.value = AgentState.Listening
             _statusMessage.value = "Connected and listening"
-            addTranscript(Speaker.System, "Reconnected to agent session.")
+            addTranscript(Speaker.System, "Reconnected to Nola voice session.")
             startMicCapture()
         }
     }
@@ -311,6 +413,7 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         audioAnalyzer.stopListening()
-        webSocket?.close(1000, "App destroyed")
+        speechRecognizer.destroy()
+        liveKitSession.disconnect()
     }
 }

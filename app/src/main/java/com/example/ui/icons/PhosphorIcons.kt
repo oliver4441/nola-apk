@@ -534,4 +534,37 @@ object PhosphorIcons {
             }
         }.build()
     }
+
+    val Key: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Phosphor.Key",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 16f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                // Key bow (circle)
+                moveTo(92f, 92f)
+                arcTo(48f, 48f, 0f, isMoreThanHalf = true, isPositiveArc = true, 92f, 188f)
+                arcTo(48f, 48f, 0f, isMoreThanHalf = true, isPositiveArc = true, 92f, 92f)
+                close()
+
+                // Key shaft
+                moveTo(136f, 140f)
+                lineTo(216f, 140f)
+                lineTo(216f, 172f)
+
+                // Key bit/teeth
+                moveTo(184f, 140f)
+                lineTo(184f, 164f)
+            }
+        }.build()
+    }
 }
