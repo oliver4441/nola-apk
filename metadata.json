@@ -1,0 +1,6 @@
+{
+  "name": "Nola",
+  "description": "Personal voice AI companion running on LiveKit with real-time audio visualizers and Gemini Live style voice interaction.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
