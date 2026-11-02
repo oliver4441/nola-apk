@@ -567,4 +567,145 @@ object PhosphorIcons {
             }
         }.build()
     }
+
+    val PaperPlaneRight: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Phosphor.PaperPlaneRight",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 16f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                moveTo(232f, 128f)
+                lineTo(32f, 32f)
+                lineTo(72f, 128f)
+                lineTo(32f, 224f)
+                close()
+                moveTo(72f, 128f)
+                lineTo(160f, 128f)
+            }
+        }.build()
+    }
+
+    val ClockCounterClockwise: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Phosphor.ClockCounterClockwise",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 16f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                moveTo(32f, 72f)
+                lineTo(32f, 32f)
+                lineTo(72f, 32f)
+                moveTo(36.7f, 67.3f)
+                arcTo(96f, 96f, 0f, isMoreThanHalf = true, isPositiveArc = true, 128f, 224f)
+                arcTo(96f, 96f, 0f, isMoreThanHalf = false, isPositiveArc = true, 44.5f, 90f)
+                moveTo(128f, 80f)
+                lineTo(128f, 128f)
+                lineTo(168f, 152f)
+            }
+        }.build()
+    }
+
+    val Trash: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Phosphor.Trash",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 16f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                moveTo(216f, 56f)
+                horizontalLineTo(40f)
+                moveTo(88f, 56f)
+                verticalLineTo(32f)
+                arcTo(8f, 8f, 0f, isMoreThanHalf = false, isPositiveArc = true, 96f, 24f)
+                horizontalLineTo(160f)
+                arcTo(8f, 8f, 0f, isMoreThanHalf = false, isPositiveArc = true, 168f, 32f)
+                verticalLineTo(56f)
+                moveTo(200f, 56f)
+                verticalLineTo(208f)
+                arcTo(16f, 16f, 0f, isMoreThanHalf = false, isPositiveArc = true, 184f, 224f)
+                horizontalLineTo(72f)
+                arcTo(16f, 16f, 0f, isMoreThanHalf = false, isPositiveArc = true, 56f, 208f)
+                verticalLineTo(56f)
+                moveTo(104f, 104f)
+                verticalLineTo(176f)
+                moveTo(152f, 104f)
+                verticalLineTo(176f)
+            }
+        }.build()
+    }
+
+    val Plus: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Phosphor.Plus",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 16f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                moveTo(40f, 128f)
+                lineTo(216f, 128f)
+                moveTo(128f, 40f)
+                lineTo(128f, 216f)
+            }
+        }.build()
+    }
+
+    val Play: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Phosphor.Play",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f
+        ).apply {
+            path(
+                fill = null,
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = 16f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round
+            ) {
+                moveTo(228f, 120.3f)
+                lineTo(76.2f, 32.7f)
+                arcTo(8.7f, 8.7f, 0f, isMoreThanHalf = false, isPositiveArc = false, 64f, 40.4f)
+                verticalLineTo(215.6f)
+                arcTo(8.7f, 8.7f, 0f, isMoreThanHalf = false, isPositiveArc = false, 76.2f, 223.3f)
+                lineTo(228f, 135.7f)
+                arcTo(8.9f, 8.9f, 0f, isMoreThanHalf = false, isPositiveArc = false, 228f, 120.3f)
+                close()
+            }
+        }.build()
+    }
 }

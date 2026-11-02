@@ -4,7 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.GeminiVoiceService
+import com.example.audio.AndroidTtsSpeaker
 import com.example.audio.AudioLevelAnalyzer
+import com.example.data.AppDatabase
+import com.example.data.SessionEntity
+import com.example.data.SessionRepository
 import com.example.livekit.LiveKitClientSession
 import com.example.livekit.LiveKitConnectionState
 import com.example.livekit.LiveKitTokenGenerator
@@ -36,6 +40,8 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     private val audioAnalyzer = AudioLevelAnalyzer(viewModelScope)
     private val geminiService = GeminiVoiceService()
     val mem0Service = Mem0Service()
+    val ttsSpeaker = AndroidTtsSpeaker(application.applicationContext, viewModelScope)
+    private val sessionRepository = SessionRepository(AppDatabase.getDatabase(application).sessionDao())
 
     private val _agentState = MutableStateFlow(AgentState.Listening)
     val agentState: StateFlow<AgentState> = _agentState.asStateFlow()
@@ -52,11 +58,23 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     private val _isTranscriptVisible = MutableStateFlow(false)
     val isTranscriptVisible: StateFlow<Boolean> = _isTranscriptVisible.asStateFlow()
 
+    private val _isChatMode = MutableStateFlow(false)
+    val isChatMode: StateFlow<Boolean> = _isChatMode.asStateFlow()
+
     private val _isSettingsOpen = MutableStateFlow(false)
     val isSettingsOpen: StateFlow<Boolean> = _isSettingsOpen.asStateFlow()
 
     private val _isMemorySheetOpen = MutableStateFlow(false)
     val isMemorySheetOpen: StateFlow<Boolean> = _isMemorySheetOpen.asStateFlow()
+
+    private val _isHistoryOpen = MutableStateFlow(false)
+    val isHistoryOpen: StateFlow<Boolean> = _isHistoryOpen.asStateFlow()
+
+    private val _currentSessionId = MutableStateFlow(UUID.randomUUID().toString())
+    val currentSessionId: StateFlow<String> = _currentSessionId.asStateFlow()
+
+    private val _sessions = MutableStateFlow<List<SessionEntity>>(emptyList())
+    val sessions: StateFlow<List<SessionEntity>> = _sessions.asStateFlow()
 
     private val _memories = MutableStateFlow<List<MemoryItem>>(emptyList())
     val memories: StateFlow<List<MemoryItem>> = _memories.asStateFlow()
@@ -94,10 +112,10 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
             handleLiveKitMessage(message)
         },
         onAgentSpeaking = { isSpeaking ->
-            if (isSpeaking) {
+            if (isSpeaking && _agentState.value != AgentState.Speaking) {
                 _agentState.value = AgentState.Speaking
                 _statusMessage.value = "Nola is speaking via LiveKit"
-            } else if (_agentState.value == AgentState.Speaking) {
+            } else if (!isSpeaking && _agentState.value == AgentState.Speaking) {
                 _agentState.value = AgentState.Listening
                 _statusMessage.value = "Listening to you"
             }
@@ -123,7 +141,6 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
 
     val liveKitConnectionState: StateFlow<LiveKitConnectionState> = liveKitSession.connectionState
 
-    private var speakingJob: Job? = null
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -136,6 +153,13 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
                 if (_agentState.value == AgentState.Listening && !_isMicMuted.value) {
                     _audioAmplitude.value = micLevel
                 }
+            }
+        }
+
+        // Collect sessions from local Room database
+        viewModelScope.launch {
+            sessionRepository.allSessions.collect { sessionList ->
+                _sessions.value = sessionList
             }
         }
 
@@ -214,11 +238,23 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSpeaker() {
-        _isSpeakerOn.value = !_isSpeakerOn.value
+        val newState = !_isSpeakerOn.value
+        _isSpeakerOn.value = newState
+        if (!newState) {
+            ttsSpeaker.stop()
+        }
     }
 
     fun toggleTranscript() {
         _isTranscriptVisible.value = !_isTranscriptVisible.value
+    }
+
+    fun toggleChatMode() {
+        _isChatMode.value = !_isChatMode.value
+    }
+
+    fun setChatMode(enabled: Boolean) {
+        _isChatMode.value = enabled
     }
 
     fun openSettings() {
@@ -238,6 +274,64 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeMemorySheet() {
         _isMemorySheetOpen.value = false
+    }
+
+    fun openHistory() {
+        _isHistoryOpen.value = true
+    }
+
+    fun closeHistory() {
+        _isHistoryOpen.value = false
+    }
+
+    fun startNewSession() {
+        val newId = UUID.randomUUID().toString()
+        _currentSessionId.value = newId
+        _transcripts.value = emptyList()
+        addTranscript(
+            speaker = Speaker.System,
+            text = "Started new voice session."
+        )
+        closeHistory()
+    }
+
+    fun loadSession(sessionId: String) {
+        viewModelScope.launch {
+            _currentSessionId.value = sessionId
+            val messages = sessionRepository.getMessagesForSessionSync(sessionId)
+            val loadedTranscripts = messages.map { msg ->
+                val spk = when (msg.speaker) {
+                    "User" -> Speaker.User
+                    "Agent" -> Speaker.Agent
+                    else -> Speaker.System
+                }
+                TranscriptEntry(
+                    id = msg.id,
+                    speaker = spk,
+                    text = msg.text,
+                    timestamp = msg.timestamp
+                )
+            }
+            _transcripts.value = loadedTranscripts
+            closeHistory()
+            _isChatMode.value = true
+        }
+    }
+
+    fun deleteSession(sessionId: String) {
+        viewModelScope.launch {
+            sessionRepository.deleteSession(sessionId)
+            if (_currentSessionId.value == sessionId) {
+                startNewSession()
+            }
+        }
+    }
+
+    fun clearAllSessions() {
+        viewModelScope.launch {
+            sessionRepository.clearAll()
+            startNewSession()
+        }
     }
 
     fun setVisualizer(type: VisualizerType) {
@@ -279,12 +373,16 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Processes live user voice input using Mem0 memory search, Gemini 3.8 Flash, and LiveKit data channel.
+     * Processes live user voice input using Mem0 memory search, Gemini, LiveKit data channel,
+     * and speaks the result out loud via Android TextToSpeech.
      */
     fun processUserVoiceInput(spokenText: String) {
         if (spokenText.isBlank() || _agentState.value == AgentState.Speaking) return
 
         viewModelScope.launch {
+            // Stop listening while agent processes and speaks
+            speechRecognizer.stopListening()
+
             // 1. Add user message
             addTranscript(Speaker.User, spokenText)
             _statusMessage.value = "Consulting Mem0 memory..."
@@ -305,7 +403,7 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
 
             _statusMessage.value = "Nola thinking with Gemini..."
 
-            // 4. Generate intelligent spoken response using Firebase AI Logic Gemini 3.8 Flash
+            // 4. Generate intelligent spoken response using Firebase AI Logic Gemini
             val recentTurns = _transcripts.value.takeLast(6).map {
                 when (it.speaker) {
                     Speaker.User -> "User" to it.text
@@ -321,10 +419,11 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
                     recentTranscripts = recentTurns
                 )
             } catch (e: Exception) {
-                "I understand, and I am ready with the next step."
+                "I hear you clearly, and I am ready with the next step."
             }
 
-            // 5. Speak response and animate waveform
+            // 5. Add Nola response to transcript and speak out loud
+            addTranscript(Speaker.Agent, geminiResponse)
             triggerAgentSpeaking(geminiResponse)
 
             // 6. Asynchronously save turn into Mem0 memory so Nola remembers next time
@@ -339,10 +438,17 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * User voice prompt simulation or trigger.
+     * Sends a text message from the chat view.
      */
-    fun simulateUserPrompt(promptText: String = "What are the latest updates on the task?") {
-        processUserVoiceInput(promptText)
+    fun sendTextMessage(messageText: String) {
+        processUserVoiceInput(messageText)
+    }
+
+    /**
+     * Replays or speaks any text message out loud on demand.
+     */
+    fun speakTextAloud(text: String) {
+        triggerAgentSpeaking(text)
     }
 
     private fun handleLiveKitMessage(message: String) {
@@ -351,35 +457,34 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Animates waveform dynamically while the agent is speaking.
+     * Synthesizes agent speech out loud using Android TextToSpeech
+     * and synchronizes amplitude with the visualizer.
      */
     private fun triggerAgentSpeaking(response: String) {
-        speakingJob?.cancel()
-        speakingJob = viewModelScope.launch {
-            _agentState.value = AgentState.Speaking
-            _statusMessage.value = "Nola is speaking"
-            addTranscript(Speaker.Agent, response)
+        _agentState.value = AgentState.Speaking
+        _statusMessage.value = "Nola is speaking"
 
-            val durationMs = (response.length * 55).coerceIn(2400, 7500)
-            val startTime = System.currentTimeMillis()
-
-            while (isActive && (System.currentTimeMillis() - startTime) < durationMs) {
-                val elapsed = (System.currentTimeMillis() - startTime).toFloat() / 200f
-                val voiceAmp = (kotlin.math.sin(elapsed.toDouble()).toFloat() * 0.35f + 0.55f).coerceIn(0.2f, 0.95f)
-                _audioAmplitude.value = voiceAmp
-                delay(30)
+        ttsSpeaker.speak(
+            text = response,
+            isSpeakerMuted = !_isSpeakerOn.value,
+            onStart = {
+                _agentState.value = AgentState.Speaking
+                _statusMessage.value = "Nola is speaking"
+            },
+            onAmplitude = { amp ->
+                _audioAmplitude.value = amp
+            },
+            onDone = {
+                _audioAmplitude.value = 0.05f
+                _agentState.value = AgentState.Listening
+                _statusMessage.value = "Listening to you"
+                startMicCapture()
             }
-
-            // Return to listening
-            _audioAmplitude.value = 0.05f
-            _agentState.value = AgentState.Listening
-            _statusMessage.value = "Listening to you"
-            speechRecognizer.startListening()
-        }
+        )
     }
 
     fun endSession() {
-        speakingJob?.cancel()
+        ttsSpeaker.stop()
         speechRecognizer.stopListening()
         liveKitSession.disconnect()
         _agentState.value = AgentState.Disconnected
@@ -408,11 +513,23 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
             text = text
         )
         _transcripts.value = _transcripts.value + entry
+
+        // Persist message in Room database
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                sessionRepository.saveMessage(
+                    sessionId = _currentSessionId.value,
+                    speaker = speaker.name,
+                    text = text
+                )
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
         audioAnalyzer.stopListening()
+        ttsSpeaker.shutdown()
         speechRecognizer.destroy()
         liveKitSession.disconnect()
     }

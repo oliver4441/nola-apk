@@ -56,6 +56,8 @@ fun AgentControlBar(
     onToggleMic: () -> Unit,
     onToggleSpeaker: () -> Unit,
     onToggleTranscript: () -> Unit,
+    onToggleChat: () -> Unit = onToggleTranscript,
+    isChatActive: Boolean = false,
     onEndSession: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -86,13 +88,13 @@ fun AgentControlBar(
                 onClick = onOpenSettings
             )
 
-            // 2. Transcript Drawer toggle
+            // 2. Chat Mode toggle
             ControlButton(
                 icon = PhosphorIcons.ChatTeardropText,
-                contentDescription = "Toggle Transcripts",
-                testTag = "transcript_toggle_button",
-                isActive = isTranscriptVisible,
-                onClick = onToggleTranscript
+                contentDescription = "Toggle Chat Mode",
+                testTag = "chat_toggle_button",
+                isActive = isChatActive || isTranscriptVisible,
+                onClick = onToggleChat
             )
 
             // 3. Central Primary Microphone Button (Gemini Live / Agents UI hero button)

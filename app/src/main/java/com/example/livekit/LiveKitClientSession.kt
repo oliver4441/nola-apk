@@ -47,14 +47,26 @@ class LiveKitClientSession(
     private val _roomInfo = MutableStateFlow<LiveKitRoomInfo?>(null)
     val roomInfo: StateFlow<LiveKitRoomInfo?> = _roomInfo.asStateFlow()
 
+    // Configured with pingInterval = 0 to prevent OkHttp client-side ping timeouts
+    // when edge proxies buffer or delay pong responses. RFC 6455 server pings are still
+    // automatically answered with pongs by OkHttp.
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS) // Keep-alive WebSocket stream
-        .pingInterval(15, TimeUnit.SECONDS)
+        .pingInterval(0, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private var webSocket: WebSocket? = null
     private var pingJob: Job? = null
+    private var reconnectJob: Job? = null
+
+    private var isManualDisconnect = false
+    private var reconnectAttempts = 0
+    private var lastUrl: String = ""
+    private var lastToken: String = ""
+    private var lastRoomName: String = "nola-agent-room"
+    private var lastIdentity: String = "user-mobile"
 
     fun connect(
         url: String,
@@ -62,10 +74,28 @@ class LiveKitClientSession(
         roomName: String = "nola-agent-room",
         identity: String = "user-mobile"
     ) {
-        disconnect()
+        isManualDisconnect = false
+        reconnectAttempts = 0
+        reconnectJob?.cancel()
 
-        _connectionState.value = LiveKitConnectionState.Connecting
-        onStateChanged(LiveKitConnectionState.Connecting)
+        lastUrl = url
+        lastToken = token
+        lastRoomName = roomName
+        lastIdentity = identity
+
+        performConnect(url, token, roomName, identity)
+    }
+
+    private fun performConnect(
+        url: String,
+        token: String,
+        roomName: String,
+        identity: String
+    ) {
+        closeCurrentSocket()
+
+        _connectionState.value = if (reconnectAttempts > 0) LiveKitConnectionState.Reconnecting else LiveKitConnectionState.Connecting
+        onStateChanged(_connectionState.value)
 
         val cleanUrl = url.trim().trimEnd('/')
         // Standard LiveKit WebRTC signaling endpoint: /rtc?access_token=...
@@ -83,7 +113,7 @@ class LiveKitClientSession(
             isCloud = isCloud
         )
 
-        Log.d(TAG, "Connecting to LiveKit Cloud: $cleanUrl (Room: $roomName)")
+        Log.d(TAG, "Connecting to LiveKit: $cleanUrl (Room: $roomName, Reconnect attempt: $reconnectAttempts)")
 
         val request = Request.Builder()
             .url(wsUrl)
@@ -92,6 +122,8 @@ class LiveKitClientSession(
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "Connected to LiveKit signaling channel successfully.")
+                reconnectAttempts = 0
+                reconnectJob?.cancel()
                 scope.launch(Dispatchers.Main) {
                     _connectionState.value = LiveKitConnectionState.Connected
                     onStateChanged(LiveKitConnectionState.Connected)
@@ -111,27 +143,69 @@ class LiveKitClientSession(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "LiveKit WebSocket closed: $code / $reason")
-                scope.launch(Dispatchers.Main) {
-                    _connectionState.value = LiveKitConnectionState.Disconnected
-                    onStateChanged(LiveKitConnectionState.Disconnected)
+                if (!isManualDisconnect) {
+                    handleUnexpectedDisconnect()
+                } else {
+                    scope.launch(Dispatchers.Main) {
+                        _connectionState.value = LiveKitConnectionState.Disconnected
+                        onStateChanged(LiveKitConnectionState.Disconnected)
+                    }
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "LiveKit WebSocket failure: ${t.message}")
-                scope.launch(Dispatchers.Main) {
+                Log.w(TAG, "LiveKit WebSocket connection event: ${t.message}")
+                if (!isManualDisconnect) {
+                    handleUnexpectedDisconnect()
+                } else {
+                    scope.launch(Dispatchers.Main) {
+                        _connectionState.value = LiveKitConnectionState.Disconnected
+                        onStateChanged(LiveKitConnectionState.Disconnected)
+                    }
+                }
+            }
+        })
+    }
+
+    private fun handleUnexpectedDisconnect() {
+        pingJob?.cancel()
+        scope.launch(Dispatchers.Main) {
+            _connectionState.value = LiveKitConnectionState.Reconnecting
+            onStateChanged(LiveKitConnectionState.Reconnecting)
+            scheduleReconnect()
+        }
+    }
+
+    private fun scheduleReconnect() {
+        reconnectJob?.cancel()
+        if (isManualDisconnect) return
+
+        reconnectJob = scope.launch(Dispatchers.IO) {
+            if (reconnectAttempts < 6) {
+                val backoffMs = (1000L * (1 shl reconnectAttempts.coerceAtMost(3))).coerceIn(1000L, 8000L)
+                reconnectAttempts++
+                Log.d(TAG, "Scheduling LiveKit reconnect attempt #$reconnectAttempts in ${backoffMs}ms...")
+                delay(backoffMs)
+                if (!isManualDisconnect && lastUrl.isNotBlank() && lastToken.isNotBlank()) {
+                    withContext(Dispatchers.Main) {
+                        performConnect(lastUrl, lastToken, lastRoomName, lastIdentity)
+                    }
+                }
+            } else {
+                Log.w(TAG, "LiveKit reconnection paused after maximum attempts. User can retry via settings.")
+                withContext(Dispatchers.Main) {
                     _connectionState.value = LiveKitConnectionState.Disconnected
                     onStateChanged(LiveKitConnectionState.Disconnected)
                 }
             }
-        })
+        }
     }
 
     private fun parseSignalMessage(text: String) {
         try {
             if (text.startsWith("{")) {
                 val json = JSONObject(text)
-                // Handle LiveKit Signal Responses: join, active speakers, data packets
+                // Handle LiveKit Signal Responses: join, active speakers, data packets, pong
                 if (json.has("speakers")) {
                     val speakers = json.getJSONArray("speakers")
                     val isAnySpeaking = speakers.length() > 0
@@ -153,14 +227,16 @@ class LiveKitClientSession(
         pingJob?.cancel()
         pingJob = scope.launch(Dispatchers.IO) {
             while (isActive && _connectionState.value == LiveKitConnectionState.Connected) {
-                delay(20000)
+                delay(25000)
                 try {
+                    // LiveKit standard JSON signal ping request
                     val pingJson = JSONObject().apply {
-                        put("type", "ping")
-                        put("timestamp", System.currentTimeMillis())
+                        put("ping", System.currentTimeMillis())
                     }
                     webSocket?.send(pingJson.toString())
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.d(TAG, "Heartbeat ping send omitted: ${e.message}")
+                }
             }
         }
     }
@@ -175,13 +251,21 @@ class LiveKitClientSession(
         }
     }
 
-    fun disconnect() {
+    private fun closeCurrentSocket() {
         pingJob?.cancel()
         pingJob = null
         try {
-            webSocket?.close(1000, "User disconnected")
+            webSocket?.close(1000, "Switching connection")
         } catch (_: Exception) {}
         webSocket = null
+    }
+
+    fun disconnect() {
+        isManualDisconnect = true
+        reconnectAttempts = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
+        closeCurrentSocket()
         _connectionState.value = LiveKitConnectionState.Disconnected
         onStateChanged(LiveKitConnectionState.Disconnected)
     }
