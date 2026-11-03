@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -82,7 +84,7 @@ fun AgentChatView(
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+    val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
 
     val promptSuggestions = listOf(
         "Summarize our discussion",
@@ -112,16 +114,22 @@ fun AgentChatView(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
                         .background(
                             when (agentState) {
-                                AgentState.Speaking -> StatusSpeaking
+                                AgentState.Disconnected -> TextMuted
+                                AgentState.Connecting -> LiveKitIndigo
+                                AgentState.Connected -> LiveKitTeal
                                 AgentState.Listening -> LiveKitCyan
-                                else -> LiveKitTeal
+                                AgentState.Thinking -> LiveKitIndigo
+                                AgentState.Speaking -> StatusSpeaking
                             }
                         )
                 )
@@ -130,7 +138,9 @@ fun AgentChatView(
                     text = statusMessage,
                     fontSize = 11.sp,
                     color = TextSecondary,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
@@ -151,6 +161,11 @@ fun AgentChatView(
             contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (transcripts.none { it.speaker != Speaker.System }) {
+                item {
+                    EmptyConversationState()
+                }
+            }
             items(transcripts, key = { it.id }) { entry ->
                 ChatMessageItem(
                     entry = entry,
@@ -190,6 +205,7 @@ fun AgentChatView(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(DarkSurface)
+                .navigationBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -269,6 +285,44 @@ fun AgentChatView(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyConversationState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(LiveKitCyan.copy(alpha = 0.12f))
+                .border(1.dp, LiveKitCyan.copy(alpha = 0.24f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = PhosphorIcons.Waveform,
+                contentDescription = null,
+                tint = LiveKitCyan,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "Your conversation starts here",
+            fontWeight = FontWeight.SemiBold,
+            color = TextPrimary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Send a message or speak naturally with Nola.",
+            fontSize = 12.sp,
+            color = TextMuted
+        )
     }
 }
 

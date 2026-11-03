@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -48,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -55,6 +58,7 @@ import com.example.R
 import com.example.model.AgentState
 import com.example.model.VisualizerType
 import com.example.ui.components.AgentAudioVisualizerAura
+import com.example.ui.components.AgentAvatarVisualizer
 import com.example.ui.components.AgentAudioVisualizerBar
 import com.example.ui.components.AgentAudioVisualizerRadial
 import com.example.ui.components.AgentAudioVisualizerWave
@@ -151,8 +155,6 @@ fun AgentVoiceScreen(
                     onToggleMic = { viewModel.toggleMic() },
                     onToggleSpeaker = { viewModel.toggleSpeaker() },
                     onToggleTranscript = { viewModel.toggleTranscript() },
-                    onToggleChat = { viewModel.toggleChatMode() },
-                    isChatActive = isChatMode,
                     onEndSession = {
                         if (agentState == AgentState.Disconnected) {
                             viewModel.reconnectSession()
@@ -210,7 +212,9 @@ fun AgentVoiceScreen(
                         onPlaySpeech = { text -> viewModel.speakTextAloud(text) },
                         onToggleMic = { viewModel.toggleMic() },
                         isMicActive = !isMicMuted,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
                     )
                 } else {
                     // Voice Visualizer Mode
@@ -240,6 +244,11 @@ fun AgentVoiceScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when (selectedVisualizer) {
+                            VisualizerType.Avatar -> AgentAvatarVisualizer(
+                                state = agentState,
+                                audioAmplitude = audioAmplitude,
+                                modifier = Modifier.fillMaxSize()
+                            )
                             VisualizerType.Aura -> AgentAudioVisualizerAura(
                                 state = agentState,
                                 audioAmplitude = audioAmplitude,
@@ -373,8 +382,7 @@ private fun TopHeaderBar(
         ) {
             // App title & Avatar
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(onClick = onOpenSettings)
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
@@ -418,7 +426,9 @@ private fun TopHeaderBar(
                         1.dp,
                         if (isChatMode) LiveKitCyan else DarkBorder
                     ),
-                    modifier = Modifier.clickable(onClick = onToggleMode)
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = onToggleMode)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
@@ -444,7 +454,7 @@ private fun TopHeaderBar(
                 IconButton(
                     onClick = onOpenHistory,
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .background(DarkSurfaceVariant)
                 ) {
@@ -452,7 +462,7 @@ private fun TopHeaderBar(
                         imageVector = PhosphorIcons.ClockCounterClockwise,
                         contentDescription = "Session History",
                         tint = TextSecondary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -461,7 +471,9 @@ private fun TopHeaderBar(
                     color = LiveKitIndigo.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(10.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, LiveKitIndigo.copy(alpha = 0.4f)),
-                    modifier = Modifier.clickable(onClick = onOpenMemory)
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = onOpenMemory)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
@@ -487,7 +499,7 @@ private fun TopHeaderBar(
                 IconButton(
                     onClick = onOpenSettings,
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .background(DarkSurfaceVariant)
                 ) {
@@ -518,10 +530,12 @@ private fun TopHeaderBar(
                 )
             ) {
                 Text(
-                    text = if (isSpeechmaticsCreditDepleted) "STT: On-Device SpeechRecognizer (Speechmatics fallback)" else "STT: Speechmatics AI",
+                    text = if (isSpeechmaticsCreditDepleted) "On-device fallback" else sttProviderName,
                     fontSize = 10.sp,
                     color = if (isSpeechmaticsCreditDepleted) StatusWarning else LiveKitCyan,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                 )
             }
 
@@ -612,7 +626,9 @@ private fun VisualizerStyleSelector(
         border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
     ) {
         Row(
-            modifier = Modifier.padding(3.dp),
+            modifier = Modifier
+                .padding(3.dp)
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             VisualizerType.entries.forEach { type ->
