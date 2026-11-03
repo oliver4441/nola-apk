@@ -86,12 +86,7 @@ fun AgentChatView(
     val listState = rememberLazyListState()
     val timeFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
 
-    val promptSuggestions = listOf(
-        "Summarize our discussion",
-        "What are the next action items?",
-        "How is the LiveKit agent performing?",
-        "Review my saved memories"
-    )
+
 
     LaunchedEffect(transcripts.size) {
         if (transcripts.isNotEmpty()) {
@@ -175,30 +170,7 @@ fun AgentChatView(
             }
         }
 
-        // Quick Suggestions
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(promptSuggestions) { suggestion ->
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(DarkSurfaceVariant)
-                        .border(1.dp, DarkBorder, RoundedCornerShape(16.dp))
-                        .clickable { onSendMessage(suggestion) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = suggestion,
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                }
-            }
-        }
+
 
         // Input Console Bar
         Row(
@@ -392,16 +364,16 @@ private fun ChatMessageItem(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
-                        .background(LiveKitIndigo.copy(alpha = 0.2f))
-                        .border(1.dp, LiveKitCyan.copy(alpha = 0.4f), CircleShape),
+                        .border(1.dp, LiveKitCyan.copy(alpha = 0.5f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        painter = painterResource(id = R.drawable.nola_avatar),
                         contentDescription = "Nola",
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
                 }
 

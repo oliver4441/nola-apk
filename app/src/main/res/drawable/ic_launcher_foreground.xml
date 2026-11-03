@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/nola_avatar_logo_1793604638432"
+        android:drawable="@drawable/nola_avatar"
         android:gravity="center" />
 </layer-list>

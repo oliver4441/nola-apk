@@ -2,10 +2,10 @@ package com.example.model
 
 enum class AgentState(val label: String) {
     Disconnected("Disconnected"),
-    Connecting("Connecting to Agent"),
+    Connecting("Connecting"),
     Connected("Connected"),
     Listening("Listening"),
-    Thinking("Thinking..."),
+    Thinking("Thinking"),
     Speaking("Speaking")
 }
 
@@ -38,8 +38,9 @@ data class LiveKitConfig(
     val apiSecret: String = "7IUG92S4tr4AnjRYp3at3MJztfwtBePam5hm9ZnM9z9",
     val token: String = "",
     val tokenServerUrl: String = "",
-    val speechmaticsApiKey: String = "JveXZCYN749DW2RJMLcyArLS2tsLBbau",
     val mem0ApiKey: String = "m0-8DbLHr53LfqrdtcIgTFq8VTOSFZh4HIzSMYpLN1y",
+    val cartesiaApiKey: String = "",
+    val cartesiaVoiceId: String = "79a125e8-cd45-4c13-8a67-188112f4dd22",
     val isDemoMode: Boolean = false,
     val isSpeakerOn: Boolean = true,
     val visualizerType: VisualizerType = VisualizerType.Avatar

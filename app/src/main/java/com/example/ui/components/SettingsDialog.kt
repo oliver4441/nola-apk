@@ -73,8 +73,8 @@ fun SettingsDialog(
     var apiSecret by remember { mutableStateOf(config.apiSecret) }
     var token by remember { mutableStateOf(config.token) }
     var tokenServerUrl by remember { mutableStateOf(config.tokenServerUrl) }
-    var speechmaticsApiKey by remember { mutableStateOf(config.speechmaticsApiKey) }
     var mem0ApiKey by remember { mutableStateOf(config.mem0ApiKey) }
+    var cartesiaApiKey by remember { mutableStateOf(config.cartesiaApiKey) }
     var isDemoMode by remember { mutableStateOf(config.isDemoMode) }
     var selectedVisualizer by remember { mutableStateOf(config.visualizerType) }
 
@@ -436,35 +436,6 @@ fun SettingsDialog(
                     )
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Speechmatics STT API Key
-                Text(
-                    text = "Speechmatics API Key (Voice STT)",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextSecondary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = speechmaticsApiKey,
-                    onValueChange = { speechmaticsApiKey = it },
-                    placeholder = { Text("Speechmatics API Key", color = TextMuted) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = LiveKitCyan,
-                        unfocusedBorderColor = DarkBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    )
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Auto-fallback to on-device speech recognizer if credits deplete",
-                    fontSize = 10.sp,
-                    color = TextMuted
-                )
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -496,6 +467,36 @@ fun SettingsDialog(
                     color = TextMuted
                 )
 
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Cartesia AI TTS API Key
+                Text(
+                    text = "Cartesia API Key (LiveKit Voice TTS)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = cartesiaApiKey,
+                    onValueChange = { cartesiaApiKey = it },
+                    placeholder = { Text("Cartesia API Key (Optional)", color = TextMuted) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LiveKitCyan,
+                        unfocusedBorderColor = DarkBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    )
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Synthesizes lifelike AI voice output. Falls back to Android TTS if unconfigured.",
+                    fontSize = 10.sp,
+                    color = TextMuted
+                )
+
                 Spacer(modifier = Modifier.height(20.dp))
 
                 // Save Action
@@ -509,8 +510,8 @@ fun SettingsDialog(
                                 apiSecret = apiSecret.trim(),
                                 token = token.trim(),
                                 tokenServerUrl = tokenServerUrl.trim(),
-                                speechmaticsApiKey = speechmaticsApiKey.trim(),
                                 mem0ApiKey = mem0ApiKey.trim(),
+                                cartesiaApiKey = cartesiaApiKey.trim(),
                                 isDemoMode = isDemoMode,
                                 visualizerType = selectedVisualizer
                             )
