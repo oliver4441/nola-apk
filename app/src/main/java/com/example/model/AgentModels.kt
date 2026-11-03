@@ -10,6 +10,7 @@ enum class AgentState(val label: String) {
 }
 
 enum class VisualizerType(val displayName: String, val description: String) {
+    Avatar("Nola", "Dimensional avatar with a voice-reactive expression"),
     Aura("Aura Orb", "Gemini Live fluid glowing aura orb"),
     Radial("Radial", "Circular frequency spectrum ring"),
     Bar("Equalizer", "Vertical multi-band audio bars"),
@@ -41,5 +42,5 @@ data class LiveKitConfig(
     val mem0ApiKey: String = "m0-8DbLHr53LfqrdtcIgTFq8VTOSFZh4HIzSMYpLN1y",
     val isDemoMode: Boolean = false,
     val isSpeakerOn: Boolean = true,
-    val visualizerType: VisualizerType = VisualizerType.Aura
+    val visualizerType: VisualizerType = VisualizerType.Avatar
 )

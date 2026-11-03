@@ -85,7 +85,7 @@ class AgentViewModel(application: Application) : AndroidViewModel(application) {
     private val _config = MutableStateFlow(LiveKitConfig())
     val config: StateFlow<LiveKitConfig> = _config.asStateFlow()
 
-    private val _selectedVisualizer = MutableStateFlow(VisualizerType.Aura)
+    private val _selectedVisualizer = MutableStateFlow(VisualizerType.Avatar)
     val selectedVisualizer: StateFlow<VisualizerType> = _selectedVisualizer.asStateFlow()
 
     private val _transcripts = MutableStateFlow<List<TranscriptEntry>>(emptyList())

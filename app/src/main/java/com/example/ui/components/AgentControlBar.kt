@@ -56,8 +56,6 @@ fun AgentControlBar(
     onToggleMic: () -> Unit,
     onToggleSpeaker: () -> Unit,
     onToggleTranscript: () -> Unit,
-    onToggleChat: () -> Unit = onToggleTranscript,
-    isChatActive: Boolean = false,
     onEndSession: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -88,13 +86,13 @@ fun AgentControlBar(
                 onClick = onOpenSettings
             )
 
-            // 2. Chat Mode toggle
+            // 2. Live transcript toggle. Chat mode is available from the header switch.
             ControlButton(
                 icon = PhosphorIcons.ChatTeardropText,
-                contentDescription = "Toggle Chat Mode",
-                testTag = "chat_toggle_button",
-                isActive = isChatActive || isTranscriptVisible,
-                onClick = onToggleChat
+                contentDescription = if (isTranscriptVisible) "Hide live transcript" else "Show live transcript",
+                testTag = "transcript_toggle_button",
+                isActive = isTranscriptVisible,
+                onClick = onToggleTranscript
             )
 
             // 3. Central Primary Microphone Button (Gemini Live / Agents UI hero button)
@@ -115,11 +113,15 @@ fun AgentControlBar(
 
             // 5. End Session / Disconnect
             ControlButton(
-                icon = PhosphorIcons.PhoneDisconnect,
-                contentDescription = "End Call",
+                icon = if (agentState == AgentState.Disconnected) PhosphorIcons.ArrowsClockwise else PhosphorIcons.PhoneDisconnect,
+                contentDescription = if (agentState == AgentState.Disconnected) "Reconnect to agent" else "End call",
                 testTag = "end_call_button",
-                tint = StatusDanger,
-                backgroundColor = StatusDanger.copy(alpha = 0.15f),
+                tint = if (agentState == AgentState.Disconnected) LiveKitCyan else StatusDanger,
+                backgroundColor = if (agentState == AgentState.Disconnected) {
+                    LiveKitCyan.copy(alpha = 0.15f)
+                } else {
+                    StatusDanger.copy(alpha = 0.15f)
+                },
                 onClick = onEndSession
             )
         }
